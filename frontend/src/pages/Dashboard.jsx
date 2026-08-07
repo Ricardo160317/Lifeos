@@ -61,7 +61,10 @@ export default function Dashboard() {
           <button onClick={() => setVista("dashboard")} className={`w-full flex items-center gap-2.5 px-5 py-2 text-sm ${vista === "dashboard" ? "text-stone-900 font-medium bg-stone-100" : "text-stone-500 hover:bg-stone-50"}`}>
             <Target size={15} /> Visión general
           </button>
-          <div className="text-[10px] uppercase tracking-wide text-stone-400 px-5 pt-4 pb-1">Pilares</div>
+          <div className="flex justify-between items-center px-5 pt-4 pb-1">
+            <span className="text-[10px] uppercase tracking-wide text-stone-400">Pilares</span>
+            <button onClick={() => setModales({ pilar: true })} className="text-stone-400 hover:text-stone-700" title="Nuevo pilar"><Plus size={13} /></button>
+          </div>
           {plan.pilares.map((p) => {
             const Icon = ICONOS_PILAR[p.nombre] || Target;
             const active = vista === "pilar" && pilarActivo === p.id;
@@ -110,6 +113,18 @@ export default function Dashboard() {
       {modales.objetivo && <ModalObjetivo pilarId={modales.objetivo} onCerrar={() => setModales({})} onCrear={async (d) => { await api.crearObjetivo(d); setModales({}); cargar(); }} />}
       {modales.habito && <ModalHabito pilarId={modales.habito} onCerrar={() => setModales({})} onCrear={async (d) => { await api.crearHabito(d); setModales({}); cargar(); }} />}
       {modales.kpi && <ModalKpi pilarId={modales.kpi} onCerrar={() => setModales({})} onCrear={async (d) => { await api.crearKpi(d); setModales({}); cargar(); }} />}
+      {modales.pilar && (
+        <ModalPilar
+          onCerrar={() => setModales({})}
+          onCrear={async (d) => {
+            const nuevo = await api.crearPilar(d);
+            setModales({});
+            await cargar();
+            setPilarActivo(nuevo.id);
+            setVista("pilar");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -358,6 +373,17 @@ function ModalKpi({ pilarId, onCerrar, onCrear }) {
         <Campo label="Meta"><input type="number" value={f.valorMeta} onChange={(e) => set("valorMeta", Number(e.target.value))} className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" /></Campo>
         <Campo label="Unidad"><input value={f.unidad} onChange={(e) => set("unidad", e.target.value)} className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" /></Campo>
       </div>
+    </ModalBase>
+  );
+}
+function ModalPilar({ onCerrar, onCrear }) {
+  const [f, setF] = useState({ nombre: "", objetivo: "", meta: "" });
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  return (
+    <ModalBase titulo="Nuevo pilar" onCerrar={onCerrar} onGuardar={() => onCrear(f)} disabled={!f.nombre.trim()}>
+      <Campo label="Nombre"><input value={f.nombre} onChange={(e) => set("nombre", e.target.value)} placeholder="Empresa, Finanzas..." className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm" /></Campo>
+      <Campo label="Objetivo (propósito de este pilar)"><textarea value={f.objetivo} onChange={(e) => set("objetivo", e.target.value)} rows={2} className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm resize-none" /></Campo>
+      <Campo label="Meta de cierre"><textarea value={f.meta} onChange={(e) => set("meta", e.target.value)} rows={2} className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm resize-none" /></Campo>
     </ModalBase>
   );
 }

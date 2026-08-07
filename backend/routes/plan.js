@@ -48,6 +48,24 @@ router.get("/completo", async (req, res) => {
   }
 });
 
+// ---------- Pilares ----------
+router.post("/pilares", async (req, res) => {
+  const { nombre, objetivo, meta } = req.body;
+  if (!nombre || !nombre.trim()) return res.status(400).json({ error: "El nombre del pilar es obligatorio" });
+  const plan = await pool.query(
+    "SELECT id FROM planes_vida WHERE usuario_id = $1 AND activo = true ORDER BY creado_en DESC LIMIT 1",
+    [req.usuarioId]
+  );
+  if (plan.rows.length === 0) return res.status(400).json({ error: "No tienes un plan de vida activo" });
+  const planId = plan.rows[0].id;
+  const orden = await pool.query("SELECT COUNT(*)::int AS n FROM pilares WHERE plan_vida_id = $1", [planId]);
+  const r = await pool.query(
+    "INSERT INTO pilares (plan_vida_id, nombre, orden, objetivo, meta) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+    [planId, nombre.trim(), orden.rows[0].n, objetivo || "", meta || ""]
+  );
+  res.json(r.rows[0]);
+});
+
 // ---------- Objetivos ----------
 router.post("/objetivos", async (req, res) => {
   const { pilarId, nombre, motivo, valorActual, valorMeta, fechaObjetivo, prioridad } = req.body;
