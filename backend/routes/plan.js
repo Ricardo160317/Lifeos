@@ -17,11 +17,16 @@ router.get("/completo", async (req, res) => {
 
     const pilares = await pool.query("SELECT * FROM pilares WHERE plan_vida_id = $1 ORDER BY orden", [planVida.id]);
     const pilarIds = pilares.rows.map((p) => p.id);
-    if (pilarIds.length === 0) return res.json({ ...planVida, pilares: [] });
+    if (pilarIds.length === 0) {
+      const reglasVacio = await pool.query("SELECT * FROM reglas_decision WHERE usuario_id = $1 ORDER BY orden", [req.usuarioId]);
+      return res.json({ ...planVida, pilares: [], objetivos: [], habitos: [], kpis: [], prioridades: [], reglas: reglasVacio.rows, registros: [] });
+    }
 
     const objetivos = await pool.query("SELECT * FROM objetivos WHERE pilar_id = ANY($1)", [pilarIds]);
     const habitos = await pool.query("SELECT * FROM habitos WHERE pilar_id = ANY($1)", [pilarIds]);
     const kpis = await pool.query("SELECT * FROM kpis WHERE pilar_id = ANY($1)", [pilarIds]);
+    const prioridades = await pool.query("SELECT * FROM prioridades WHERE pilar_id = ANY($1) ORDER BY orden", [pilarIds]);
+    const reglas = await pool.query("SELECT * FROM reglas_decision WHERE usuario_id = $1 ORDER BY orden", [req.usuarioId]);
     const habitoIds = habitos.rows.map((h) => h.id);
     const registros = habitoIds.length
       ? await pool.query("SELECT * FROM habito_registros WHERE habito_id = ANY($1) ORDER BY fecha DESC LIMIT 1000", [habitoIds])
@@ -33,6 +38,8 @@ router.get("/completo", async (req, res) => {
       objetivos: objetivos.rows,
       habitos: habitos.rows,
       kpis: kpis.rows,
+      prioridades: prioridades.rows,
+      reglas: reglas.rows,
       registros: registros.rows,
     });
   } catch (e) {
@@ -72,6 +79,32 @@ router.post("/habitos/:id/marcar", async (req, res) => {
   }
   const r = await pool.query("INSERT INTO habito_registros (habito_id, fecha, cumplido) VALUES ($1,$2,true) RETURNING *", [req.params.id, fecha]);
   res.json(r.rows[0]);
+});
+
+// ---------- Prioridades ----------
+router.post("/prioridades", async (req, res) => {
+  const { pilarId, texto } = req.body;
+  const r = await pool.query("INSERT INTO prioridades (pilar_id, texto) VALUES ($1,$2) RETURNING *", [pilarId, texto]);
+  res.json(r.rows[0]);
+});
+router.delete("/prioridades/:id", async (req, res) => {
+  await pool.query("DELETE FROM prioridades WHERE id = $1", [req.params.id]);
+  res.json({ ok: true });
+});
+
+// ---------- Mis reglas de decisión ----------
+router.get("/reglas", async (req, res) => {
+  const r = await pool.query("SELECT * FROM reglas_decision WHERE usuario_id = $1 ORDER BY orden", [req.usuarioId]);
+  res.json(r.rows);
+});
+router.post("/reglas", async (req, res) => {
+  const { texto } = req.body;
+  const r = await pool.query("INSERT INTO reglas_decision (usuario_id, texto) VALUES ($1,$2) RETURNING *", [req.usuarioId, texto]);
+  res.json(r.rows[0]);
+});
+router.delete("/reglas/:id", async (req, res) => {
+  await pool.query("DELETE FROM reglas_decision WHERE id = $1 AND usuario_id = $2", [req.params.id, req.usuarioId]);
+  res.json({ ok: true });
 });
 
 // ---------- KPIs ----------
