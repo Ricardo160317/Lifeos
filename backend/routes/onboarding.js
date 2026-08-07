@@ -4,6 +4,8 @@ import { pool } from "../db/pool.js";
 
 const router = Router();
 
+const MARCA_OTRAS_AREAS = "otras áreas";
+
 const SYSTEM_PROMPT = `Eres un coach experto que ayuda a una persona a construir su "LifeOS": no un gestor de tareas, sino un Plan Maestro de Vida completo. La aplicación debe funcionar como un CEO personal que conoce su visión, sus objetivos, sus hábitos y sus indicadores. Los pilares típicos son Salud, Empresa/Carrera, Finanzas, Desarrollo Personal, Familia/Relaciones, Productividad, Propósito/Espiritualidad — usa los que la persona use o los que apliquen según lo que cuenta.
 
 Tu trabajo:
@@ -51,6 +53,23 @@ router.post("/chat", requireAuth, async (req, res) => {
     let limpio = texto.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
     let parsed;
     try { parsed = JSON.parse(limpio); } catch { parsed = { tipo: "pregunta", texto, opciones: [] }; }
+
+    // Salvaguarda: no confiar solo en que la IA recuerde preguntar por otras áreas.
+    // Si el plan que quiere cerrar cubre un solo pilar y todavía no se lo preguntamos, forzamos la pregunta.
+    if (parsed?.tipo === "plan" && Array.isArray(parsed.pilares) && parsed.pilares.length === 1) {
+      const yaPregunto = (mensajes || []).some(
+        (m) => m.role === "assistant" && typeof m.content === "string" && m.content.toLowerCase().includes(MARCA_OTRAS_AREAS)
+      );
+      if (!yaPregunto) {
+        const nombrePilar = parsed.pilares[0]?.nombre || "esta área";
+        parsed = {
+          tipo: "pregunta",
+          texto: `Ya profundizamos bien en ${nombrePilar}. Antes de cerrar tu plan: ¿quieres incluir ${MARCA_OTRAS_AREAS} de tu vida (Empresa, Finanzas, Desarrollo Personal, Familia, Productividad, Propósito)?`,
+          opciones: ["Sí, agregar otra área", "No, solo este pilar por ahora"],
+        };
+      }
+    }
+
     res.json(parsed);
   } catch (e) {
     console.error(e);

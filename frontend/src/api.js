@@ -19,6 +19,7 @@ export const api = {
   onboardingFinalizar: (plan) => req("/api/onboarding/finalizar", { method: "POST", body: JSON.stringify(plan) }),
 
   planCompleto: () => req("/api/plan/completo"),
+  crearPilar: (data) => req("/api/plan/pilares", { method: "POST", body: JSON.stringify(data) }),
   crearObjetivo: (data) => req("/api/plan/objetivos", { method: "POST", body: JSON.stringify(data) }),
   cambiarEstadoObjetivo: (id, estado) => req(`/api/plan/objetivos/${id}/estado`, { method: "PATCH", body: JSON.stringify({ estado }) }),
   crearHabito: (data) => req("/api/plan/habitos", { method: "POST", body: JSON.stringify(data) }),
