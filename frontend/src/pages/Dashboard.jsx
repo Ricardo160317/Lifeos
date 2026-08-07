@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { Target, Flame, Plus, X, Check, Sparkles, Heart, Briefcase, Wallet, BookOpen, Users, Sunrise, Edit3 } from "lucide-react";
+import { Target, Flame, Plus, X, Check, Sparkles, Heart, Briefcase, Wallet, BookOpen, Users, Sunrise, Edit3, Zap, Compass, ListChecks, Trash2 } from "lucide-react";
 import { api } from "../api";
 
-const ICONOS_PILAR = { Salud: Heart, Empresa: Briefcase, Finanzas: Wallet, "Desarrollo Personal": BookOpen, Familia: Users, Espiritualidad: Sunrise };
+const ICONOS_PILAR = { Salud: Heart, Empresa: Briefcase, Finanzas: Wallet, "Desarrollo Personal": BookOpen, Familia: Users, Espiritualidad: Sunrise, Productividad: Zap, Propósito: Compass };
 
 function diasEntre(fechaISO) {
   return Math.round((new Date() - new Date(fechaISO)) / (1000 * 60 * 60 * 24));
@@ -27,6 +27,7 @@ export default function Dashboard() {
   const objetivosDe = (pilarId) => plan.objetivos.filter((o) => o.pilar_id === pilarId);
   const habitosDe = (pilarId) => plan.habitos.filter((h) => h.pilar_id === pilarId);
   const kpisDe = (pilarId) => plan.kpis.filter((k) => k.pilar_id === pilarId);
+  const prioridadesDe = (pilarId) => (plan.prioridades || []).filter((pr) => pr.pilar_id === pilarId);
   const registrosDe = (habitoId) => plan.registros.filter((r) => r.habito_id === habitoId);
 
   function calcularRacha(habitoId) {
@@ -74,6 +75,9 @@ export default function Dashboard() {
           <button onClick={() => setVista("revision")} className={`w-full flex items-center gap-2.5 px-5 py-2 text-sm ${vista === "revision" ? "text-stone-900 font-medium bg-stone-100" : "text-stone-500 hover:bg-stone-50"}`}>
             <Edit3 size={15} /> Revisión semanal
           </button>
+          <button onClick={() => setVista("reglas")} className={`w-full flex items-center gap-2.5 px-5 py-2 text-sm ${vista === "reglas" ? "text-stone-900 font-medium bg-stone-100" : "text-stone-500 hover:bg-stone-50"}`}>
+            <ListChecks size={15} /> Mis reglas
+          </button>
         </nav>
       </aside>
 
@@ -87,6 +91,7 @@ export default function Dashboard() {
             objetivos={objetivosDe(pilarObj.id)}
             habitos={habitosDe(pilarObj.id)}
             kpis={kpisDe(pilarObj.id)}
+            prioridades={prioridadesDe(pilarObj.id)}
             calcularRacha={calcularRacha}
             porcentaje30={porcentaje30}
             onMarcarHabito={marcarHabito}
@@ -94,9 +99,12 @@ export default function Dashboard() {
             onNuevoObjetivo={() => setModales({ objetivo: pilarObj.id })}
             onNuevoHabito={() => setModales({ habito: pilarObj.id })}
             onNuevoKpi={() => setModales({ kpi: pilarObj.id })}
+            onAgregarPrioridad={async (texto) => { await api.crearPrioridad({ pilarId: pilarObj.id, texto }); cargar(); }}
+            onEliminarPrioridad={async (id) => { await api.eliminarPrioridad(id); cargar(); }}
           />
         )}
         {vista === "revision" && <RevisionView />}
+        {vista === "reglas" && <ReglasView reglas={plan.reglas} onCambio={cargar} />}
       </main>
 
       {modales.objetivo && <ModalObjetivo pilarId={modales.objetivo} onCerrar={() => setModales({})} onCrear={async (d) => { await api.crearObjetivo(d); setModales({}); cargar(); }} />}
@@ -141,14 +149,44 @@ function VisionGeneral({ plan, calcularRacha, onVerPilar }) {
   );
 }
 
-function PilarView({ pilar, objetivos, habitos, kpis, calcularRacha, porcentaje30, onMarcarHabito, onCambiarEstadoObjetivo, onNuevoObjetivo, onNuevoHabito, onNuevoKpi }) {
+function PilarView({ pilar, objetivos, habitos, kpis, prioridades, calcularRacha, porcentaje30, onMarcarHabito, onCambiarEstadoObjetivo, onNuevoObjetivo, onNuevoHabito, onNuevoKpi, onAgregarPrioridad, onEliminarPrioridad }) {
   const Icon = ICONOS_PILAR[pilar.nombre] || Target;
+  const [nuevaPrioridad, setNuevaPrioridad] = useState("");
   return (
     <div>
-      <div className="flex items-center gap-2.5 mb-6">
+      <div className="flex items-center gap-2.5 mb-2">
         <div className="w-10 h-10 rounded-xl bg-stone-900 flex items-center justify-center"><Icon size={18} className="text-white" /></div>
         <h1 style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-2xl font-semibold text-stone-900">{pilar.nombre}</h1>
       </div>
+      {pilar.objetivo && <p className="text-sm text-stone-500 mb-6 max-w-xl">{pilar.objetivo}</p>}
+      {!pilar.objetivo && <div className="mb-6" />}
+
+      <SeccionHeader titulo="Prioridades" onAgregar={null} />
+      <div className="space-y-1.5 mb-2">
+        {(prioridades || []).length === 0 && <EmptyBox texto="Aún no tienes prioridades definidas en este pilar." />}
+        {(prioridades || []).map((pr) => (
+          <div key={pr.id} className="flex items-center justify-between bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-700">
+            <span>{pr.texto}</span>
+            <button onClick={() => onEliminarPrioridad(pr.id)} className="text-stone-300 hover:text-red-500"><Trash2 size={13} /></button>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 mb-6">
+        <input
+          value={nuevaPrioridad}
+          onChange={(e) => setNuevaPrioridad(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && nuevaPrioridad.trim()) { onAgregarPrioridad(nuevaPrioridad.trim()); setNuevaPrioridad(""); } }}
+          placeholder="Agregar prioridad..."
+          className="flex-1 border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-300"
+        />
+        <button
+          onClick={() => { if (nuevaPrioridad.trim()) { onAgregarPrioridad(nuevaPrioridad.trim()); setNuevaPrioridad(""); } }}
+          className="px-3 py-1.5 text-sm font-medium bg-stone-900 text-white rounded-lg"
+        >
+          Agregar
+        </button>
+      </div>
+
       <SeccionHeader titulo="Objetivos" onAgregar={onNuevoObjetivo} />
       <div className="space-y-2 mb-6">
         {objetivos.length === 0 && <EmptyBox texto="Aún no tienes objetivos en este pilar." />}
@@ -192,12 +230,23 @@ function PilarView({ pilar, objetivos, habitos, kpis, calcularRacha, porcentaje3
           );
         })}
       </div>
+      {pilar.meta && (
+        <div className="bg-stone-900 text-white rounded-2xl p-4 mt-6">
+          <div className="text-[11px] uppercase tracking-wide text-stone-400 mb-1">Meta de este pilar</div>
+          <p className="text-sm text-stone-100">{pilar.meta}</p>
+        </div>
+      )}
     </div>
   );
 }
 
 function SeccionHeader({ titulo, onAgregar }) {
-  return <div className="flex justify-between items-center mb-2"><h3 style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-sm font-semibold text-stone-800">{titulo}</h3><button onClick={onAgregar} className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-800"><Plus size={13} /> Agregar</button></div>;
+  return (
+    <div className="flex justify-between items-center mb-2">
+      <h3 style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-sm font-semibold text-stone-800">{titulo}</h3>
+      {onAgregar && <button onClick={onAgregar} className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-800"><Plus size={13} /> Agregar</button>}
+    </div>
+  );
 }
 function EmptyBox({ texto }) { return <div className="text-xs text-stone-400 bg-white border border-dashed border-stone-200 rounded-xl p-4 text-center">{texto}</div>; }
 
@@ -231,6 +280,45 @@ function RevisionView() {
         ))}
       </div>
       {mostrar && <ModalRevision onCerrar={() => setMostrar(false)} onGuardar={guardar} />}
+    </div>
+  );
+}
+
+function ReglasView({ reglas, onCambio }) {
+  const [nueva, setNueva] = useState("");
+  async function agregar() {
+    if (!nueva.trim()) return;
+    await api.crearRegla(nueva.trim());
+    setNueva("");
+    onCambio();
+  }
+  async function eliminar(id) {
+    await api.eliminarRegla(id);
+    onCambio();
+  }
+  return (
+    <div>
+      <h1 style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-2xl font-semibold text-stone-900 mb-1">Mis reglas</h1>
+      <p className="text-sm text-stone-500 mb-6 max-w-xl">Preguntas filtro para tomar decisiones alineadas con tu visión. Si la respuesta es "no", reconsidera esa decisión.</p>
+      <div className="space-y-2 mb-4">
+        {(reglas || []).length === 0 && <EmptyBox texto="Aún no tienes reglas de decisión definidas." />}
+        {(reglas || []).map((r) => (
+          <div key={r.id} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-4 py-3 text-sm text-stone-700">
+            <span>{r.texto}</span>
+            <button onClick={() => eliminar(r.id)} className="text-stone-300 hover:text-red-500"><Trash2 size={14} /></button>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={nueva}
+          onChange={(e) => setNueva(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") agregar(); }}
+          placeholder="¿Esto me acerca a mi visión?"
+          className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-300"
+        />
+        <button onClick={agregar} className="px-4 py-2 text-sm font-medium bg-stone-900 text-white rounded-lg">Agregar</button>
+      </div>
     </div>
   );
 }

@@ -25,6 +25,11 @@ export const api = {
   marcarHabito: (id) => req(`/api/plan/habitos/${id}/marcar`, { method: "POST" }),
   crearKpi: (data) => req("/api/plan/kpis", { method: "POST", body: JSON.stringify(data) }),
   actualizarKpi: (id, valorActual) => req(`/api/plan/kpis/${id}`, { method: "PATCH", body: JSON.stringify({ valorActual }) }),
+  crearPrioridad: (data) => req("/api/plan/prioridades", { method: "POST", body: JSON.stringify(data) }),
+  eliminarPrioridad: (id) => req(`/api/plan/prioridades/${id}`, { method: "DELETE" }),
+  reglas: () => req("/api/plan/reglas"),
+  crearRegla: (texto) => req("/api/plan/reglas", { method: "POST", body: JSON.stringify({ texto }) }),
+  eliminarRegla: (id) => req(`/api/plan/reglas/${id}`, { method: "DELETE" }),
   revisiones: () => req("/api/plan/revisiones"),
   crearRevision: (data) => req("/api/plan/revisiones", { method: "POST", body: JSON.stringify(data) }),
 };
