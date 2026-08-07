@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Target, Flame, Plus, X, Check, Sparkles, Heart, Briefcase, Wallet, BookOpen, Users, Sunrise, Edit3, Zap, Compass, ListChecks, Trash2 } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Target, Flame, Plus, X, Check, Sparkles, Heart, Briefcase, Wallet, BookOpen, Users, Sunrise, Edit3, Zap, Compass, ListChecks, Trash2, Send, Loader2 } from "lucide-react";
 import { api } from "../api";
 
 const ICONOS_PILAR = { Salud: Heart, Empresa: Briefcase, Finanzas: Wallet, "Desarrollo Personal": BookOpen, Familia: Users, Espiritualidad: Sunrise, Productividad: Zap, Propósito: Compass };
@@ -63,7 +63,7 @@ export default function Dashboard() {
           </button>
           <div className="flex justify-between items-center px-5 pt-4 pb-1">
             <span className="text-[10px] uppercase tracking-wide text-stone-400">Pilares</span>
-            <button onClick={() => setModales({ pilar: true })} className="text-stone-400 hover:text-stone-700" title="Nuevo pilar"><Plus size={13} /></button>
+            <button onClick={() => setModales({ pilar: "ia" })} className="text-stone-400 hover:text-stone-700" title="Nuevo pilar"><Plus size={13} /></button>
           </div>
           {plan.pilares.map((p) => {
             const Icon = ICONOS_PILAR[p.nombre] || Target;
@@ -113,7 +113,19 @@ export default function Dashboard() {
       {modales.objetivo && <ModalObjetivo pilarId={modales.objetivo} onCerrar={() => setModales({})} onCrear={async (d) => { await api.crearObjetivo(d); setModales({}); cargar(); }} />}
       {modales.habito && <ModalHabito pilarId={modales.habito} onCerrar={() => setModales({})} onCrear={async (d) => { await api.crearHabito(d); setModales({}); cargar(); }} />}
       {modales.kpi && <ModalKpi pilarId={modales.kpi} onCerrar={() => setModales({})} onCrear={async (d) => { await api.crearKpi(d); setModales({}); cargar(); }} />}
-      {modales.pilar && (
+      {modales.pilar === "ia" && (
+        <ModalNuevoPilarIA
+          onCerrar={() => setModales({})}
+          onManual={() => setModales({ pilar: "manual" })}
+          onCreado={async (pilarId) => {
+            setModales({});
+            await cargar();
+            setPilarActivo(pilarId);
+            setVista("pilar");
+          }}
+        />
+      )}
+      {modales.pilar === "manual" && (
         <ModalPilar
           onCerrar={() => setModales({})}
           onCrear={async (d) => {
@@ -385,6 +397,123 @@ function ModalPilar({ onCerrar, onCrear }) {
       <Campo label="Objetivo (propósito de este pilar)"><textarea value={f.objetivo} onChange={(e) => set("objetivo", e.target.value)} rows={2} className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm resize-none" /></Campo>
       <Campo label="Meta de cierre"><textarea value={f.meta} onChange={(e) => set("meta", e.target.value)} rows={2} className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm resize-none" /></Campo>
     </ModalBase>
+  );
+}
+
+function ModalNuevoPilarIA({ onCerrar, onManual, onCreado }) {
+  const [mensajes, setMensajes] = useState([
+    { role: "assistant", content: "¿Qué área de tu vida quieres agregar como nuevo pilar? Cuéntame qué quieres lograr ahí.", opciones: [] },
+  ]);
+  const [input, setInput] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState("");
+  const [pilarPendiente, setPilarPendiente] = useState(null);
+  const scrollRef = useRef(null);
+
+  useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [mensajes, cargando]);
+
+  async function guardar(pilar) {
+    try {
+      const { pilarId } = await api.agregarPilar(pilar);
+      setPilarPendiente(null);
+      onCreado(pilarId);
+    } catch (e) {
+      setPilarPendiente(pilar);
+      setError("Se armó el pilar, pero no se pudo guardar. Intenta de nuevo.");
+    }
+  }
+
+  async function enviar(textoForzado) {
+    const contenido = textoForzado ?? input;
+    if (!contenido.trim() || cargando) return;
+    const nuevosMensajes = [...mensajes, { role: "user", content: contenido }];
+    setMensajes(nuevosMensajes);
+    setInput("");
+    setCargando(true);
+    setError("");
+    try {
+      const parsed = await api.chatPilar(nuevosMensajes.map((m) => ({ role: m.role, content: m.content })));
+      if (parsed?.tipo === "pilar") {
+        setMensajes((prev) => [...prev, { role: "assistant", content: "Listo, armé el pilar. Guardándolo..." }]);
+        await guardar(parsed.pilar);
+      } else {
+        setMensajes((prev) => [...prev, { role: "assistant", content: parsed.texto || "¿Puedes contarme un poco más?", opciones: parsed.opciones || [] }]);
+      }
+    } catch (e) {
+      setError("No se pudo conectar con la IA. Intenta de nuevo.");
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  async function reintentar() {
+    if (cargando) return;
+    if (pilarPendiente) {
+      setError("");
+      setCargando(true);
+      await guardar(pilarPendiente);
+      setCargando(false);
+    } else {
+      enviar("Intenta de nuevo, por favor.");
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg flex flex-col" style={{ height: "75vh" }}>
+        <div className="flex justify-between items-center px-5 py-4 border-b border-stone-100">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-amber-500" />
+            <h2 style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="font-semibold text-stone-900">Nuevo pilar con la IA</h2>
+          </div>
+          <button onClick={onCerrar}><X size={18} className="text-stone-400" /></button>
+        </div>
+        <div ref={scrollRef} className="flex-1 overflow-auto px-5 py-4 space-y-3">
+          {mensajes.map((m, i) => {
+            const esUltima = i === mensajes.length - 1;
+            return (
+              <div key={i}>
+                <div className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm ${m.role === "user" ? "bg-stone-900 text-white" : "bg-stone-100 text-stone-800"}`}>{m.content}</div>
+                </div>
+                {m.role === "assistant" && esUltima && m.opciones?.length > 0 && !cargando && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {m.opciones.map((op, j) => (
+                      <button key={j} onClick={() => enviar(op)} className="text-xs border border-stone-300 rounded-full px-3 py-1.5 text-stone-700 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-colors">{op}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {cargando && <div className="bg-stone-100 rounded-2xl px-3.5 py-2 text-sm text-stone-400 flex items-center gap-1.5 w-fit"><Loader2 size={13} className="animate-spin" /> pensando...</div>}
+          {error && (
+            <div className="text-center">
+              <div className="text-xs text-red-600">{error}</div>
+              <button onClick={reintentar} disabled={cargando} className="text-xs text-stone-500 underline mt-1 disabled:opacity-40">Reintentar</button>
+            </div>
+          )}
+        </div>
+        <div className="px-5 py-4 border-t border-stone-100">
+          <div className="flex gap-2">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }}
+              rows={2}
+              placeholder="Escribe tu respuesta..."
+              className="flex-1 border border-stone-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-stone-300"
+            />
+            <button onClick={() => enviar()} disabled={cargando || !input.trim()} className="w-10 h-10 shrink-0 rounded-xl bg-stone-900 disabled:opacity-30 text-white flex items-center justify-center self-end">
+              <Send size={15} />
+            </button>
+          </div>
+          <button onClick={onManual} disabled={cargando} className="text-xs text-stone-400 hover:text-stone-600 mt-2">
+            Prefiero escribirlo yo mismo →
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 function ModalRevision({ onCerrar, onGuardar }) {

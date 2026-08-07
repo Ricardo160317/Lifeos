@@ -17,6 +17,8 @@ export const api = {
 
   onboardingChat: (mensajes) => req("/api/onboarding/chat", { method: "POST", body: JSON.stringify({ mensajes }) }),
   onboardingFinalizar: (plan) => req("/api/onboarding/finalizar", { method: "POST", body: JSON.stringify(plan) }),
+  chatPilar: (mensajes) => req("/api/onboarding/chat-pilar", { method: "POST", body: JSON.stringify({ mensajes }) }),
+  agregarPilar: (pilar) => req("/api/onboarding/agregar-pilar", { method: "POST", body: JSON.stringify({ pilar }) }),
 
   planCompleto: () => req("/api/plan/completo"),
   crearPilar: (data) => req("/api/plan/pilares", { method: "POST", body: JSON.stringify(data) }),
