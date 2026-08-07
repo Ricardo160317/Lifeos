@@ -37,7 +37,7 @@ lifeos/
 Crea una base Postgres (local o en Railway, igual que tus otros proyectos) y aplica el esquema:
 ```bash
 cd backend
-cp .env.example .env   # completa DATABASE_URL, JWT_SECRET y ANTHROPIC_API_KEY
+cp .env.example .env   # completa DATABASE_URL, JWT_SECRET y OPENAI_API_KEY
 npm install
 npm run migrate
 ```
@@ -56,7 +56,7 @@ npm run dev   # http://localhost:5173
 ```
 
 ## Deploy (mismo patrón que tus otros proyectos en Railway)
-- Un servicio para `backend/` con las variables de entorno del `.env.example` (agrega `ANTHROPIC_API_KEY` real)
+- Un servicio para `backend/` con las variables de entorno del `.env.example` (agrega `OPENAI_API_KEY` real)
 - Un servicio para `frontend/` (o servido como estático desde el backend si prefieres un solo deploy)
 - Corre `npm run migrate` una vez contra la base de producción para crear las tablas
 

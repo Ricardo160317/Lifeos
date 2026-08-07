@@ -22,22 +22,23 @@ Plan final: {"tipo":"plan","vision":"...","pilares":[{"nombre":"...","objetivos"
 router.post("/chat", requireAuth, async (req, res) => {
   const { mensajes } = req.body;
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        system: SYSTEM_PROMPT,
-        messages: mensajes,
+        model: "gpt-4o",
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          ...mensajes,
+        ],
       }),
     });
     const data = await response.json();
-    const texto = data.content?.map((b) => (b.type === "text" ? b.text : "")).join("") ?? "";
+    const texto = data.choices?.[0]?.message?.content ?? "";
     let limpio = texto.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
     let parsed;
     try { parsed = JSON.parse(limpio); } catch { parsed = { tipo: "pregunta", texto, opciones: [] }; }
