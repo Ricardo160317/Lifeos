@@ -29,6 +29,62 @@ Plan final: {"tipo":"plan","vision":"...","pilares":[{"nombre":"...","objetivo":
 
 9. Opciones cortas (2-4 palabras). Sé cálido pero breve.`;
 
+function buildSystemPromptPilar(visionTexto, pilaresExistentes) {
+  return `Eres un coach experto ayudando a alguien a agregar UN pilar nuevo a su LifeOS, un Plan Maestro de Vida que ya tiene. No le pidas que lo defina solo — ayúdalo a pensarlo contigo, como harías con cualquier pilar nuevo del plan.
+
+Contexto del usuario:
+- Su visión de vida: "${visionTexto || "(sin definir)"}"
+- Pilares que ya tiene en su plan: ${pilaresExistentes.length ? pilaresExistentes.join(", ") : "ninguno todavía"}
+
+Tu trabajo:
+1. A partir de lo que la persona te cuenta sobre esta área nueva, identifica qué quiere lograr ahí.
+2. Haz UNA pregunta corta y concreta a la vez (qué quiere lograr, valor actual, meta, plazo, obstáculo, frecuencia). Nunca varias preguntas en el mismo turno. Máximo 4-5 preguntas en total — no alargues innecesariamente.
+3. Siempre que aplique, da entre 3 y 5 opciones cortas de respuesta (rangos, frecuencias, plazos) pensadas para un botón. Si la pregunta necesita respuesta abierta única, usa "opciones":[].
+4. Cuando tengas suficiente contexto, arma el pilar completo con:
+   - "objetivo": una frase que resuma el propósito de este pilar.
+   - "prioridades": 3-6 frases cortas y concretas (foco de este pilar, más específicas que el objetivo pero más amplias que un hábito diario).
+   - "meta": una frase de cierre que capture el resultado final deseado.
+   - 1-2 "objetivos" medibles (con motivo, valor actual, meta y plazo).
+   - 2-4 "habitos" específicos y accionables, no genéricos — deben reflejar lo que la persona contó.
+   - al menos 1 "kpi" medible cuando aplique.
+5. Responde SIEMPRE con un único JSON válido (sin markdown, sin texto fuera del JSON):
+
+Pregunta: {"tipo":"pregunta","texto":"...","opciones":["...","...","..."]}
+Pilar final: {"tipo":"pilar","pilar":{"nombre":"...","objetivo":"...","meta":"...","prioridades":["...","...","..."],"objetivos":[{"nombre":"...","motivo":"...","valorActual":"...","valorMeta":"...","fechaObjetivo":"YYYY-MM-DD o vacío","prioridad":"alta|media|baja"}],"habitos":[{"nombre":"...","frecuencia":"diario|semanal"}],"kpis":[{"nombre":"...","valorActual":0,"valorMeta":0,"unidad":"..."}]}}
+
+6. Opciones cortas (2-4 palabras). Sé cálido pero breve.`;
+}
+
+async function insertarPilar(client, planId, orden, p) {
+  const pilarResult = await client.query(
+    "INSERT INTO pilares (plan_vida_id, nombre, orden, objetivo, meta) VALUES ($1,$2,$3,$4,$5) RETURNING id",
+    [planId, p.nombre, orden, p.objetivo || "", p.meta || ""]
+  );
+  const pilarId = pilarResult.rows[0].id;
+
+  for (const [j, texto] of (p.prioridades || []).entries()) {
+    if (!texto) continue;
+    await client.query("INSERT INTO prioridades (pilar_id, texto, orden) VALUES ($1,$2,$3)", [pilarId, texto, j]);
+  }
+  for (const o of p.objetivos || []) {
+    await client.query(
+      `INSERT INTO objetivos (pilar_id, nombre, motivo, valor_actual, valor_meta, fecha_objetivo, prioridad)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [pilarId, o.nombre, o.motivo || "", o.valorActual || "", o.valorMeta || "", o.fechaObjetivo || null, o.prioridad || "media"]
+    );
+  }
+  for (const h of p.habitos || []) {
+    await client.query("INSERT INTO habitos (pilar_id, nombre, frecuencia) VALUES ($1,$2,$3)", [pilarId, h.nombre, h.frecuencia || "diario"]);
+  }
+  for (const k of p.kpis || []) {
+    await client.query(
+      "INSERT INTO kpis (pilar_id, nombre, valor_actual, valor_meta, unidad) VALUES ($1,$2,$3,$4,$5)",
+      [pilarId, k.nombre, Number(k.valorActual) || 0, Number(k.valorMeta) || 0, k.unidad || ""]
+    );
+  }
+  return pilarId;
+}
+
 // Proxy: el frontend nunca ve la API key, solo pasa el historial de mensajes
 router.post("/chat", requireAuth, async (req, res) => {
   const { mensajes } = req.body;
@@ -90,32 +146,7 @@ router.post("/finalizar", requireAuth, async (req, res) => {
     const planId = planResult.rows[0].id;
 
     for (const [i, p] of (plan.pilares || []).entries()) {
-      const pilarResult = await client.query(
-        "INSERT INTO pilares (plan_vida_id, nombre, orden, objetivo, meta) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-        [planId, p.nombre, i, p.objetivo || "", p.meta || ""]
-      );
-      const pilarId = pilarResult.rows[0].id;
-
-      for (const [j, texto] of (p.prioridades || []).entries()) {
-        if (!texto) continue;
-        await client.query("INSERT INTO prioridades (pilar_id, texto, orden) VALUES ($1,$2,$3)", [pilarId, texto, j]);
-      }
-      for (const o of p.objetivos || []) {
-        await client.query(
-          `INSERT INTO objetivos (pilar_id, nombre, motivo, valor_actual, valor_meta, fecha_objetivo, prioridad)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [pilarId, o.nombre, o.motivo || "", o.valorActual || "", o.valorMeta || "", o.fechaObjetivo || null, o.prioridad || "media"]
-        );
-      }
-      for (const h of p.habitos || []) {
-        await client.query("INSERT INTO habitos (pilar_id, nombre, frecuencia) VALUES ($1,$2,$3)", [pilarId, h.nombre, h.frecuencia || "diario"]);
-      }
-      for (const k of p.kpis || []) {
-        await client.query(
-          "INSERT INTO kpis (pilar_id, nombre, valor_actual, valor_meta, unidad) VALUES ($1,$2,$3,$4,$5)",
-          [pilarId, k.nombre, Number(k.valorActual) || 0, Number(k.valorMeta) || 0, k.unidad || ""]
-        );
-      }
+      await insertarPilar(client, planId, i, p);
     }
     for (const [i, texto] of (plan.reglas || []).entries()) {
       if (!texto) continue;
@@ -127,6 +158,73 @@ router.post("/finalizar", requireAuth, async (req, res) => {
     await client.query("ROLLBACK");
     console.error(e);
     res.status(500).json({ error: "Error guardando el plan" });
+  } finally {
+    client.release();
+  }
+});
+
+// Chat de IA para agregar un pilar nuevo a un plan ya existente
+router.post("/chat-pilar", requireAuth, async (req, res) => {
+  const { mensajes } = req.body;
+  try {
+    const plan = await pool.query(
+      "SELECT id, vision_texto FROM planes_vida WHERE usuario_id = $1 AND activo = true ORDER BY creado_en DESC LIMIT 1",
+      [req.usuarioId]
+    );
+    if (plan.rows.length === 0) return res.status(400).json({ error: "No tienes un plan de vida activo" });
+    const pilaresExistentes = await pool.query("SELECT nombre FROM pilares WHERE plan_vida_id = $1", [plan.rows[0].id]);
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: buildSystemPromptPilar(plan.rows[0].vision_texto, pilaresExistentes.rows.map((p) => p.nombre)) },
+          ...mensajes,
+        ],
+      }),
+    });
+    const data = await response.json();
+    const texto = data.choices?.[0]?.message?.content ?? "";
+    let limpio = texto.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+    let parsed;
+    try { parsed = JSON.parse(limpio); } catch { parsed = { tipo: "pregunta", texto, opciones: [] }; }
+    res.json(parsed);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Error consultando la IA" });
+  }
+});
+
+// Guarda el pilar armado por la IA sobre el plan activo del usuario
+router.post("/agregar-pilar", requireAuth, async (req, res) => {
+  const { pilar } = req.body;
+  if (!pilar?.nombre) return res.status(400).json({ error: "Falta el nombre del pilar" });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const plan = await client.query(
+      "SELECT id FROM planes_vida WHERE usuario_id = $1 AND activo = true ORDER BY creado_en DESC LIMIT 1",
+      [req.usuarioId]
+    );
+    if (plan.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "No tienes un plan de vida activo" });
+    }
+    const planId = plan.rows[0].id;
+    const orden = await client.query("SELECT COUNT(*)::int AS n FROM pilares WHERE plan_vida_id = $1", [planId]);
+    const pilarId = await insertarPilar(client, planId, orden.rows[0].n, pilar);
+    await client.query("COMMIT");
+    res.json({ pilarId });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error(e);
+    res.status(500).json({ error: "Error guardando el pilar" });
   } finally {
     client.release();
   }
