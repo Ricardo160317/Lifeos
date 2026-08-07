@@ -9,9 +9,21 @@ export default function Onboarding({ onListo }) {
   const [input, setInput] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
+  const [planPendiente, setPlanPendiente] = useState(null);
   const scrollRef = useRef(null);
 
   useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [mensajes, cargando]);
+
+  async function guardarPlan(parsed) {
+    try {
+      await api.onboardingFinalizar(parsed);
+      setPlanPendiente(null);
+      setTimeout(() => onListo(), 600);
+    } catch (e) {
+      setPlanPendiente(parsed);
+      setError("Tu plan se armó, pero no se pudo guardar. Intenta de nuevo.");
+    }
+  }
 
   async function enviar(textoForzado) {
     const contenido = textoForzado ?? input;
@@ -25,8 +37,7 @@ export default function Onboarding({ onListo }) {
       const parsed = await api.onboardingChat(nuevosMensajes.map((m) => ({ role: m.role, content: m.content })));
       if (parsed?.tipo === "plan") {
         setMensajes((prev) => [...prev, { role: "assistant", content: "Listo, arme tu plan. Guardándolo..." }]);
-        const { planId } = await api.onboardingFinalizar(parsed);
-        setTimeout(() => onListo(), 600);
+        await guardarPlan(parsed);
       } else {
         setMensajes((prev) => [...prev, { role: "assistant", content: parsed.texto || "¿Puedes contarme un poco más?", opciones: parsed.opciones || [] }]);
       }
@@ -34,6 +45,18 @@ export default function Onboarding({ onListo }) {
       setError("No se pudo conectar con la IA. Intenta de nuevo.");
     } finally {
       setCargando(false);
+    }
+  }
+
+  async function reintentar() {
+    if (cargando) return;
+    if (planPendiente) {
+      setError("");
+      setCargando(true);
+      await guardarPlan(planPendiente);
+      setCargando(false);
+    } else {
+      enviar("Intenta de nuevo, por favor.");
     }
   }
 
@@ -68,7 +91,12 @@ export default function Onboarding({ onListo }) {
             );
           })}
           {cargando && <div className="bg-stone-100 rounded-2xl px-3.5 py-2 text-sm text-stone-400 flex items-center gap-1.5 w-fit"><Loader2 size={13} className="animate-spin" /> pensando...</div>}
-          {error && <div className="text-xs text-red-600 text-center">{error}</div>}
+          {error && (
+            <div className="text-center">
+              <div className="text-xs text-red-600">{error}</div>
+              <button onClick={reintentar} disabled={cargando} className="text-xs text-stone-500 underline mt-1 disabled:opacity-40">Reintentar</button>
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-4 border-t border-stone-100">
